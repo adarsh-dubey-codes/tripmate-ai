@@ -15,15 +15,37 @@ export default async function TripDetailPage(props: { params: Promise<{ id: stri
     notFound()
   }
 
-  // Group activities by date
-  const groupedActivities: Record<string, typeof trip.activities> = {}
+  // Group activities by day_number
+  const groupedActivities: Record<number, typeof trip.activities> = {}
   trip.activities.forEach(activity => {
-    const dateStr = format(parseISO(activity.start_time), "yyyy-MM-dd")
-    if (!groupedActivities[dateStr]) groupedActivities[dateStr] = []
-    groupedActivities[dateStr].push(activity)
+    const day = activity.day_number || 1
+    if (!groupedActivities[day]) groupedActivities[day] = []
+    groupedActivities[day].push(activity)
   })
 
-  const sortedDates = Object.keys(groupedActivities).sort()
+  const sortedDays = Object.keys(groupedActivities).map(Number).sort((a, b) => a - b)
+
+  const formatTime = (timeStr: string | null) => {
+    if (!timeStr) return ""
+    try {
+      if (timeStr.includes("T")) {
+        return format(parseISO(timeStr), "h:mm a")
+      }
+      const parts = timeStr.split(":")
+      if (parts.length >= 2) {
+        const h = parseInt(parts[0], 10)
+        const m = parseInt(parts[1], 10)
+        if (!isNaN(h) && !isNaN(m)) {
+          const ampm = h >= 12 ? "PM" : "AM"
+          const h12 = h % 12 || 12
+          return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`
+        }
+      }
+      return timeStr
+    } catch (e) {
+      return timeStr
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto">
@@ -47,19 +69,18 @@ export default async function TripDetailPage(props: { params: Promise<{ id: stri
         
         {/* Left Column - Itinerary Timeline */}
         <div className="xl:col-span-2 space-y-8">
-          {sortedDates.map((dateStr, dayIndex) => (
-            <div key={dateStr} className="space-y-6">
+          {sortedDays.map((dayNum) => (
+            <div key={dayNum} className="space-y-6">
               <div className="flex items-center justify-between border-b pb-2">
-                <h2 className="font-serif text-2xl font-bold text-primary">Day {dayIndex + 1}</h2>
-                <span className="text-muted-foreground font-medium">{format(parseISO(dateStr), "EEEE, MMM do")}</span>
+                <h2 className="font-serif text-2xl font-bold text-primary">Day {dayNum}</h2>
               </div>
 
               <div className="space-y-4">
-                {groupedActivities[dateStr].map((activity, index) => (
+                {groupedActivities[dayNum].map((activity, index) => (
                   <div key={activity.id} className="flex gap-4 group">
                     <div className="flex flex-col items-center mt-1">
                       <div className="w-3 h-3 rounded-full border-2 border-primary bg-background" />
-                      {index !== groupedActivities[dateStr].length - 1 && (
+                      {index !== groupedActivities[dayNum].length - 1 && (
                         <div className="w-0.5 h-full bg-border mt-2" />
                       )}
                     </div>
@@ -75,8 +96,8 @@ export default async function TripDetailPage(props: { params: Promise<{ id: stri
                         <div className="flex-1">
                           <div className="flex justify-between items-start">
                             <div className="flex items-center gap-2 text-sm text-primary font-medium mb-1">
-                              <Clock className="w-4 h-4" /> {format(parseISO(activity.start_time), "h:mm a")}
-                              {activity.end_time && ` - ${format(parseISO(activity.end_time), "h:mm a")}`}
+                              <Clock className="w-4 h-4" /> {formatTime(activity.start_time)}
+                              {activity.end_time && ` - ${formatTime(activity.end_time)}`}
                             </div>
                             <ActivityActions activityId={activity.id} tripId={trip.id} />
                           </div>
@@ -93,7 +114,7 @@ export default async function TripDetailPage(props: { params: Promise<{ id: stri
                   </div>
                 ))}
                 
-                {groupedActivities[dateStr].length === 0 && (
+                {groupedActivities[dayNum].length === 0 && (
                   <p className="text-muted-foreground text-sm py-4">No activities planned for this day.</p>
                 )}
               </div>

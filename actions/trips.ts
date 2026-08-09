@@ -50,11 +50,14 @@ export async function getTripById(id: string) {
 
   if (error) return null
 
-  // Sort activities by start_time
+  // Sort activities by day_number, then start_time string comparison
   if (data.activities) {
-    data.activities.sort((a: Activity, b: Activity) => 
-      new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
-    )
+    data.activities.sort((a: Activity, b: Activity) => {
+      if (a.day_number !== b.day_number) return a.day_number - b.day_number;
+      const timeA = a.start_time || "";
+      const timeB = b.start_time || "";
+      return timeA.localeCompare(timeB);
+    })
   }
 
   return data as Trip & { activities: Activity[] }
