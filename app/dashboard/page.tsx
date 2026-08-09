@@ -38,7 +38,7 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {trips.map((trip) => (
-            <Link href={`/dashboard/trips/${trip.id}`} key={trip.id} className="group">
+            <Link href={`/dashboard/trips/${trip.id}`} key={trip.id} className="block group">
               <Card className="overflow-hidden h-full transition-all hover:shadow-md border-muted">
                 <div className="h-48 w-full overflow-hidden relative">
                   <div className="w-full h-full bg-muted flex items-center justify-center">
