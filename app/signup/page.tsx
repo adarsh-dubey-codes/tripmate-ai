@@ -1,53 +1,112 @@
-import { createClient } from '@/utils/supabase/server'
-import { redirect } from 'next/navigation'
-import { revalidatePath } from 'next/cache'
+'use client'
+
+import { createClient } from '@/utils/supabase/client'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { MapPin } from 'lucide-react'
 
-export default async function SignupPage(props: { searchParams: Promise<{ message?: string }> }) {
-  const searchParams = await props.searchParams
-  const message = searchParams.message
+function SignupFormContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const urlMessage = searchParams.get('message')
 
-  async function signup(formData: FormData) {
-    'use server'
+  const [errorMsg, setErrorMsg] = useState<string | null>(urlMessage)
+  const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [debugTrace, setDebugTrace] = useState<any>(null) // ADDED TRACING
 
+  async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setIsLoading(true)
+    setErrorMsg(null)
+    setSuccessMsg(null)
+    setDebugTrace(null) // CLEAR TRACE
+
+    const formData = new FormData(e.currentTarget)
     const email = formData.get('email') as string
     const password = formData.get('password') as string
 
-    const supabase = await createClient()
+    const supabase = createClient()
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        }
+      })
 
-    if (error) {
-      redirect(`/signup?message=${encodeURIComponent(error.message)}`)
+      // CAPTURE TRACE
+      const traceData = {
+        timestamp: new Date().toISOString(),
+        email,
+        responseData: data,
+        responseError: error
+      };
+      setDebugTrace(traceData);
+      console.log("--- SIGNUP TRACE ---", traceData);
+
+      if (error) {
+        setErrorMsg(error.message)
+        setIsLoading(false)
+        return
+      }
+
+      // Detect fake success returned by Supabase when Prevent Email Enumeration is ON
+      // and the email rate limit is exceeded, or email is already registered.
+      // GoTrue deletes the auth.users record but leaves the public.profiles record orphaned.
+      if (data.user && (!data.user.identities || data.user.identities.length === 0)) {
+        setErrorMsg('Signup failed. This email may be rate-limited by the email provider, or already registered.')
+        setIsLoading(false)
+        return
+      }
+
+      if (!data.session) {
+        setSuccessMsg('Check your email to confirm your account')
+        setIsLoading(false)
+        return
+      }
+
+      router.refresh()
+      router.push('/dashboard')
+    } catch (err: any) {
+      setDebugTrace({
+        timestamp: new Date().toISOString(),
+        email,
+        caughtException: err.toString(),
+        stack: err.stack
+      });
+      setErrorMsg(err.message || 'An unexpected error occurred')
+      setIsLoading(false)
     }
-
-    if (!data.session) {
-      redirect('/signup?message=Check your email to confirm your account')
-    }
-
-    revalidatePath('/', 'layout')
-    redirect('/dashboard')
   }
 
+  const displayMessage = errorMsg || successMsg
+  const isError = !!errorMsg
+
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] w-full">
-      <div className="flex flex-1 items-center justify-center p-8 lg:p-12 order-2 lg:order-1">
+    <div className="flex min-h-[calc(100vh-4rem)] w-full flex-col lg:flex-row">
+      <div className="flex flex-1 items-center justify-center p-8 lg:p-12 order-2 lg:order-1 flex-col">
+        {debugTrace && (
+          <div className="w-full max-w-2xl bg-zinc-950 text-green-400 p-4 rounded-md mb-8 overflow-auto text-xs font-mono text-left">
+            <h3 className="text-white mb-2 font-bold">SIGNUP TRACE:</h3>
+            <pre>{JSON.stringify(debugTrace, null, 2)}</pre>
+          </div>
+        )}
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <h1 className="font-serif text-3xl font-bold tracking-tight">Create an Account</h1>
             <p className="text-muted-foreground mt-2">Join TripMate AI and start planning your next cinematic adventure.</p>
           </div>
 
-          <form action={signup} className="space-y-6">
-            {message && (
-              <div className="bg-destructive/15 text-destructive p-3 rounded-md text-sm text-center">
-                {message}
+          <form onSubmit={handleSignup} className="space-y-6">
+            {displayMessage && (
+              <div className={`p-3 rounded-md text-sm text-center ${isError ? 'bg-destructive/15 text-destructive' : 'bg-green-500/15 text-green-600'}`}>
+                {displayMessage}
               </div>
             )}
 
@@ -56,18 +115,18 @@ export default async function SignupPage(props: { searchParams: Promise<{ messag
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Email
                 </label>
-                <Input name="email" type="email" placeholder="m@example.com" required />
+                <Input name="email" type="email" placeholder="m@example.com" required disabled={isLoading} />
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
                   Password
                 </label>
-                <Input name="password" type="password" required />
+                <Input name="password" type="password" required disabled={isLoading} />
               </div>
             </div>
 
-            <Button type="submit" className="w-full" size="lg">
-              Sign Up
+            <Button type="submit" className="w-full" size="lg" disabled={isLoading}>
+              {isLoading ? 'Signing up...' : 'Sign Up'}
             </Button>
             
             <div className="text-center text-sm text-muted-foreground">
@@ -95,5 +154,13 @@ export default async function SignupPage(props: { searchParams: Promise<{ messag
         </div>
       </div>
     </div>
+  )
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">Loading...</div>}>
+      <SignupFormContent />
+    </Suspense>
   )
 }
