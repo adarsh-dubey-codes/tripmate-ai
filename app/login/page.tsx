@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,6 +27,7 @@ export default async function LoginPage(props: { searchParams: Promise<{ message
       redirect(`/login?message=${encodeURIComponent(error.message)}`)
     }
 
+    revalidatePath('/', 'layout')
     redirect('/dashboard')
   }
 

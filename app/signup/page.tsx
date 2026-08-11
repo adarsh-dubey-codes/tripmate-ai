@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +18,7 @@ export default async function SignupPage(props: { searchParams: Promise<{ messag
 
     const supabase = await createClient()
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
@@ -26,6 +27,11 @@ export default async function SignupPage(props: { searchParams: Promise<{ messag
       redirect(`/signup?message=${encodeURIComponent(error.message)}`)
     }
 
+    if (!data.session) {
+      redirect('/signup?message=Check your email to confirm your account')
+    }
+
+    revalidatePath('/', 'layout')
     redirect('/dashboard')
   }
 
